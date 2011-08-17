@@ -51,6 +51,9 @@ class TestTimer;
 #endif
 #endif // USE_GUI
 
+#ifdef USE_BENCHMARK
+class PlaybackTimer;
+#endif
 
 class ConnectedEvent: public Event {
 public:
@@ -223,6 +226,25 @@ public:
     void resize_screen(RedScreen *screen, int width, int height);
     void minimize();
     void set_title(const std::string& title);
+#ifdef USE_BENCHMARK
+    // recording
+    uint64_t get_record_start_time(); 
+    uint64_t record_time_in_msec();
+    void open_record_file(const char *record_file_name);
+    FILE *get_record_fp(void) { return _record_fp; } 
+    void record_mouse_enter(int x, int y, unsigned int buttons_state);
+    void record_mouse_motion(int x, int y, unsigned int buttons_state);
+    void record_mouse_button(SpiceMouseButton button, unsigned int buttons_state, int press);
+    void record_key(RedKey key, bool down);
+    int  get_snapshot_offset(void);
+    // playback
+    bool is_sync_snapshot(int num_diff);
+    void start_playback(const char *playback_file_name);
+    FILE *get_playback_fp(void) { return _playback_fp; } 
+    void playback_single_event(void);
+    void set_benchmark(void) { _benchmark = true; }
+    bool benchmark_mode(void) { return _benchmark; }
+#endif
     void hide();
     void show();
     void external_show();
@@ -378,6 +400,16 @@ private:
     MouseHandler* _mouse_handler;
     const MonitorsList* _monitors;
     std::string _title;
+#ifdef USE_BENCHMARK
+    // recording
+    FILE *_record_fp;
+    uint64_t _record_start_time;
+    int _snapshot_offset;
+    // playback
+    FILE *_playback_fp;
+    AutoRef<PlaybackTimer> _playback_timer;
+    bool _benchmark;
+#endif
     bool _sys_key_intercept_mode;
     StickyInfo _sticky_info;
     std::vector<int> _canvas_types;

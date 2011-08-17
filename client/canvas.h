@@ -409,6 +409,11 @@ public:
     virtual void copy_pixels(const QRegion& region, RedDrawable* dc,
                              const PixmapHeader* pixmap) = 0;
     virtual void copy_pixels(const QRegion& region, RedDrawable& dc) = 0;
+#ifdef USE_BENCHMARK
+    virtual void set_record_info(FILE *record_fp, uint64_t record_start_time, bool is_record_display) = 0;
+    virtual void record_pixels(SpiceRect rect) = 0;
+    virtual int32_t check_snapshot_sync(uint32_t *snapshot_pixels, SpiceRect rect) = 0;
+#endif
     virtual void thread_touch() = 0;
 
     void clear();

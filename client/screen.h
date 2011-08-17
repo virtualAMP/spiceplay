@@ -106,6 +106,12 @@ public:
     void interrupt_update();
 
     void update();
+#ifdef USE_BENCHMARK
+    void set_snapshot_pixels(int index, uint32_t pixel) { _snapshot_pixels[index] = pixel; } /*FIXME:bound*/
+    void set_pending_snapshot(bool pending) { _is_pending_snapshot_sync = pending; }
+    bool is_pending_snapshot_sync(void) { return _is_pending_snapshot_sync; }
+    int32_t check_snapshot_sync(ScreenLayer *layer);
+#endif
 
 private:
     friend class UpdateEvent;
@@ -200,6 +206,11 @@ private:
     bool _pointer_on_screen;
     SpicePoint _pointer_pos;
     unsigned int _mouse_botton_state;
+#ifdef USE_BENCHMARK
+    uint32_t *_snapshot_pixels;
+    bool _is_pending_snapshot_sync;
+    friend class Application;
+#endif
 
     friend class LayerChangedEvent;
 };

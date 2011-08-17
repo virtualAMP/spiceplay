@@ -935,6 +935,41 @@ void DisplayChannel::copy_pixels(const QRegion& dest_region,
     canvas->copy_pixels(dest_region, dest_dc);
 }
 
+#ifdef USE_BENCHMARK
+void DisplayChannel::set_record_info(FILE *record_fp, uint64_t record_start_time, bool is_record_display)
+{
+    Canvas *canvas;
+
+    if (!surfaces_mngr.is_present_canvas(0)) {
+        return;
+    }
+    canvas = surfaces_mngr.get_canvas(0);
+    canvas->set_record_info(record_fp, record_start_time, is_record_display);
+}
+void DisplayChannel::record_pixels(SpiceRect rect)
+{
+    Canvas *canvas;
+
+    if (!surfaces_mngr.is_present_canvas(0)) {
+        return;
+    }
+    canvas = surfaces_mngr.get_canvas(0);
+
+    canvas->record_pixels(rect);
+}
+int32_t DisplayChannel::check_snapshot_sync(uint32_t *snapshot_pixels, SpiceRect rect)
+{
+    Canvas *canvas;
+
+    if (!surfaces_mngr.is_present_canvas(0)) {
+        return -1;
+    }
+    canvas = surfaces_mngr.get_canvas(0);
+
+    return canvas->check_snapshot_sync(snapshot_pixels, rect);
+}
+#endif
+
 class ActivateTimerEvent: public Event {
 public:
     ActivateTimerEvent(DisplayChannel& channel)

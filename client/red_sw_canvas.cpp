@@ -31,6 +31,9 @@ SCanvas::SCanvas(bool onscreen,
                  GlzDecoderWindow &glz_decoder_window, CSurfaces& csurfaces)
     : Canvas (pixmap_cache, palette_cache, glz_decoder_window, csurfaces)
     , _pixmap (0)
+#ifdef USE_BENCHMARK
+    , _record_fp (NULL)
+#endif
 {
     if (onscreen) {
         _pixmap = new RedPixmapSw(width, height,
@@ -73,6 +76,9 @@ void SCanvas::copy_pixels(const QRegion& region, RedDrawable& dest_dc)
 {
     pixman_box32_t *rects;
     int num_rects;
+#ifdef USE_BENCHMARK
+    int update_pct = 0;
+#endif
 
     ASSERT(_pixmap != NULL);
 
@@ -86,7 +92,79 @@ void SCanvas::copy_pixels(const QRegion& region, RedDrawable& dest_dc)
         r.bottom = rects[i].y2;
         dest_dc.copy_pixels(*_pixmap, r.left, r.top, r);
     }
+#ifdef USE_BENCHMARK
+    if( _record_fp && _is_record_display && update_pct )
+        fprintf(_record_fp, "%Ld O %d\n", Platform::get_monolithic_time() / 1000 - _record_start_time, update_pct * 100 / (_pixmap->get_height() * _pixmap->get_width()) );
+#endif
 }
+
+#ifdef USE_BENCHMARK
+void SCanvas::set_record_info(FILE *record_fp, uint64_t record_start_time, bool is_record_display)
+{
+    _record_fp = record_fp;
+    _record_start_time = record_start_time;
+    _is_record_display = is_record_display;
+
+    printf( "%s: record_fp=%p, record_start_time=%ld, is_record_display=%d\n", __func__, record_fp, record_start_time, is_record_display );
+}
+
+void SCanvas::record_pixels(SpiceRect rect)
+{
+    ASSERT(_pixmap != NULL);
+
+    if( _record_fp ) {
+        int i, j;
+        uint8_t *data = _pixmap->get_data();
+        int pixmap_width = _pixmap->get_width();
+        int pixmap_height = _pixmap->get_height();
+        int left  = rect.left >= 0 ? rect.left : 0;
+        int right = rect.right < pixmap_width ? rect.right : pixmap_width;
+        int top = rect.top >= 0 ? rect.top : 0;
+        int bottom = rect.bottom < pixmap_height ? rect.bottom : pixmap_height;
+        int width = right - left + 1;
+        int height = bottom - top + 1;
+        
+        fprintf( _record_fp, "%Ld S %d\n", Platform::get_monolithic_time() / 1000 - _record_start_time, width * height );
+        for( i=0 ; i < width ; i++ ) {
+            for( j=0 ; j < height ; j++ ) {
+                int x = left + i;
+                int y = top + j;
+                fprintf( _record_fp, "%x\n", *((uint32_t *)data + x + (y * pixmap_width)) );
+            }
+        }
+    }
+}
+
+int32_t SCanvas::check_snapshot_sync(uint32_t *snapshot_pixels, SpiceRect rect)
+{
+    int32_t num_diff = 0, k = 0;
+    int i, j;
+    uint8_t *data = _pixmap->get_data();
+    int pixmap_width = _pixmap->get_width();
+    int pixmap_height = _pixmap->get_height();
+    int left  = rect.left >= 0 ? rect.left : 0;
+    int right = rect.right < pixmap_width ? rect.right : pixmap_width;
+    int top = rect.top >= 0 ? rect.top : 0;
+    int bottom = rect.bottom < pixmap_height ? rect.bottom : pixmap_height;
+    int width = right - left + 1;
+    int height = bottom - top + 1;
+    for( i=0 ; i < width ; i++ ) {
+        for( j=0 ; j < height ; j++ ) {
+            int x = left + i;
+            int y = top + j;
+            //fprintf( record_fp, "%x\n", *((uint32_t *)data + x + (y * pixmap_width)) );
+            if( snapshot_pixels[k] != *((uint32_t *)data + x + (y * pixmap_width)) ) {
+                num_diff++;
+            }
+            printf( "[SNAP] %d: cur=%x <-> snap=%x\n", k, 
+                    *((uint32_t *)data + x + (y * pixmap_width)), snapshot_pixels[k] );
+            k++;
+        }
+    }
+    printf( "[SNAP] --> num_diff=%d\n", num_diff );
+    return num_diff;
+}
+#endif
 
 void SCanvas::copy_pixels(const QRegion& region, RedDrawable* dest_dc, const PixmapHeader* pixmap)
 {

@@ -114,6 +114,14 @@ AC_ARG_ENABLE(opengl,
 [  have_opengl=yes])
 AM_CONDITIONAL(SUPPORT_GL, test "x$have_opengl" = "xyes")
 
+use_benchmark=no
+AC_ARG_ENABLE(benchmark,
+[  --enable-benchmark         Enable benchmark with spiceplay],
+[  use_benchmark=yes])
+if test "x$use_benchmark" = "xyes"; then
+   AC_DEFINE(USE_BENCHMARK, [1], [Define if supporting benchmark with spiceplay])
+fi
+
 have_smartcard=no
 AC_ARG_ENABLE(smartcard,
 [  --enable-smartcard         Enable network redirection],
@@ -444,6 +452,8 @@ echo "
         OpenGL:                   ${have_opengl}
 
         GUI:                      ${use_gui}
+
+        Benchmark:                ${use_benchmark}
 
         Smartcard:                ${have_smartcard}
 

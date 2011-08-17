@@ -36,13 +36,22 @@ public:
     virtual void copy_pixels(const QRegion& region, RedDrawable* dc,
                              const PixmapHeader* pixmap);
     virtual void copy_pixels(const QRegion& region, RedDrawable& dc);
-
+#ifdef USE_BENCHMARK
+    virtual void set_record_info(FILE *record_fp, uint64_t record_start_time, bool is_record_display);
+    virtual void record_pixels(SpiceRect rect);
+    virtual int32_t check_snapshot_sync(uint32_t *snapshot_pixels, SpiceRect rect);
+#endif
     virtual CanvasType get_pixmap_type();
 
 private:
     RedPixmap *_pixmap;
     unsigned long _base;
     unsigned long _max;
+#ifdef USE_BENCHMARK
+    FILE *_record_fp;
+    uint64_t _record_start_time;
+    bool _is_record_display;
+#endif
 };
 
 #endif

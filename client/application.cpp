@@ -348,6 +348,12 @@ Application::Application()
     , _mouse_handler (&default_mouse_handler)
     , _monitors (NULL)
     , _title ("SPICEc:%d")
+#ifdef USE_BENCHMARK
+    , _record_fp (NULL)
+    , _snapshot_offset(4)
+    , _playback_fp (NULL)
+    , _benchmark (false)
+#endif
     , _sys_key_intercept_mode (false)
 	, _enable_controller (false)
 #ifdef USE_GUI
@@ -433,6 +439,11 @@ Application::~Application()
     }
 #endif // USE_GUI
 
+#ifdef USE_BENCHMARK
+    // FIXME
+    //if (*_playback_timer != NULL)
+    //    deactivate_interval_timer(*_playback_timer);
+#endif
     if (_info_layer->screen()) {
         _main_screen->detach_layer(*_info_layer);
     }
@@ -1652,6 +1663,190 @@ void Application::set_title(const std::string& title)
     }
 }
 
+#ifdef USE_BENCHMARK
+// recording
+uint64_t Application::get_record_start_time() 
+{
+    return _record_start_time;
+}
+uint64_t Application::record_time_in_msec() 
+{
+    return Platform::get_monolithic_time() / 1000 - _record_start_time;
+}
+void Application::open_record_file(const char *record_file_name)
+{
+    if( ( _record_fp = fopen( record_file_name, "w" ) ) == NULL ) {
+        fprintf( stderr, "record file open error: %s\n", record_file_name );
+        return;
+    }
+    _record_start_time = Platform::get_monolithic_time() / 1000;
+}
+void Application::record_mouse_enter(int x, int y, unsigned int buttons_state) 
+{
+    if( _record_fp ) 
+        fprintf( _record_fp, "%lu E %d %d %d\n", record_time_in_msec(), x , y, buttons_state );
+}
+void Application::record_mouse_motion(int x, int y, unsigned int buttons_state) 
+{
+    if( _record_fp ) 
+        fprintf( _record_fp, "%lu M %d %d %d\n", record_time_in_msec(), x , y, buttons_state );
+}
+void Application::record_mouse_button(SpiceMouseButton button, unsigned int buttons_state, int press) 
+{
+    if( _record_fp )
+        fprintf( _record_fp, "%lu %s %d %d\n", record_time_in_msec(), press ? "P" : "R", button, buttons_state );
+}
+void Application::record_key(RedKey key, bool down)
+{
+    if( _record_fp )
+        fprintf( _record_fp, "%lu %s %d\n", record_time_in_msec(), down ? "D" : "U", key );
+}
+int Application::get_snapshot_offset() 
+{
+    return _snapshot_offset;
+}
+// playback
+class PlaybackTimer: public Timer {
+public:
+    PlaybackTimer(Application& app)
+        : _app (app)
+    {
+    }
+
+    virtual void response(AbstractProcessLoop& events_loop)
+    {
+        _app.playback_single_event();
+    }
+
+private:
+    Application& _app;
+};
+bool Application::is_sync_snapshot(int num_diff) 
+{
+    printf( "num_diff=%d  --- threshold=%d  -> bool=%d\n", 
+            num_diff, (_snapshot_offset * (_snapshot_offset + 1) + 1), num_diff >=0 && num_diff <= (_snapshot_offset * (_snapshot_offset + 1) + 1));
+    return num_diff >=0 && num_diff <= (_snapshot_offset * (_snapshot_offset + 1) + 1);   // approx. 1/4 of total pixels 
+}
+void Application::start_playback(const char *playback_file_name)
+{
+    if( ( _playback_fp = fopen( playback_file_name, "r" ) ) == NULL ) {
+        fprintf( stderr, "playback file open error: %s\n", playback_file_name);
+        return;
+    }
+    _record_start_time = Platform::get_monolithic_time() / 1000;
+
+    _playback_timer.reset(new PlaybackTimer(*this));
+    activate_interval_timer(*_playback_timer, 10000);
+
+}
+
+#define return_with_msg()       do { \
+        fprintf(stderr, "%s (%d): playback error\n", __func__, __LINE__ );      \
+        return; \
+} while(0)
+void Application::playback_single_event()
+{
+    static uint64_t time = 0;
+    uint64_t next_time, interval_time;
+    char cmd;
+    //bool is_press = false;
+    if( !time ) 
+        if (fscanf( _playback_fp, "%lu ", &time ) != 1) 
+                return_with_msg();
+    if( _main_screen->is_pending_snapshot_sync() )  {
+        //printf( "!!!! snapshot has not been synced yet !!!!\n" );
+        _main_screen->check_snapshot_sync(NULL);
+        if( _main_screen->is_pending_snapshot_sync() )
+            return;
+    }
+
+    if( fscanf( _playback_fp, "%c", &cmd ) == 1 ) {
+        switch(cmd) {
+            case 'E':
+            case 'M':
+            {
+                int x, y, buttons_state;
+                if (fscanf( _playback_fp, "%d %d %d\n", &x, &y, &buttons_state ) != 3) 
+                        return_with_msg();
+                //printf( "%c %d %d %d\n", cmd, x, y, buttons_state );
+                if( cmd == 'E' ) {
+                    _main_screen->on_pointer_enter(x, y, buttons_state);
+                }
+                else if( cmd == 'M' ){
+                    _main_screen->on_pointer_motion(x, y, buttons_state);
+                }
+                break;
+            }
+            case 'S':
+            {
+                int i;
+                uint32_t num_pixels, pixel;
+                if (fscanf( _playback_fp, "%d\n", &num_pixels ) != 1) 
+                        return_with_msg();
+                if( num_pixels > 0 ) {
+                    for( i=0 ; i < num_pixels ; i++ ) {
+                        if (fscanf( _playback_fp, "%x\n", &pixel ) != 1)
+                                return_with_msg();
+                        _main_screen->set_snapshot_pixels(i, pixel);
+                    }
+                    _main_screen->set_pending_snapshot(true);
+                }
+                break;
+            }
+            case 'P':
+            case 'R':
+            {
+                int button, buttons_state;
+                if (fscanf( _playback_fp, "%d %d\n", &button, &buttons_state ) != 2) 
+                        return_with_msg();
+                printf( "%c %d %d\n", cmd, button, buttons_state );
+                if( cmd == 'P' ) {
+                    //is_press = true;
+                    _main_screen->on_mouse_button_press((SpiceMouseButton)button, buttons_state);
+                }
+                else if( cmd == 'R' ){
+                    _main_screen->on_mouse_button_release((SpiceMouseButton)button, buttons_state);
+                }
+                break;
+            }
+            case 'U':
+            case 'D':
+            {
+                int key;
+                if (fscanf( _playback_fp, "%d\n", &key ) != 1) 
+                        return_with_msg();
+                printf( "%c %d\n", cmd, key );
+                if( cmd == 'D' ) {
+                    //is_press = true;
+                    _main_screen->on_key_press((RedKey)key);
+                }
+                else if( cmd == 'U' ){
+                    _main_screen->on_key_release((RedKey)key);
+                }
+                break;
+            }
+            case 'O':   /* in the case of dump trace, just ignore it */
+            {
+                int dummy;
+                if (fscanf( _playback_fp, "%d\n", &dummy ) != 1)
+                        return_with_msg();
+                break;
+            }
+        }
+        if (fscanf( _playback_fp, "%lu ", &next_time ) != 1) 
+                return_with_msg();
+        deactivate_interval_timer(*_playback_timer);
+
+        interval_time = (next_time - time) / 1000;
+        if( interval_time <= 0 ) 
+            interval_time = 1;
+        activate_interval_timer(*_playback_timer, interval_time );
+
+        time = next_time;
+    }
+}
+#endif
+
 bool Application::is_key_set_pressed(const HotkeySet& key_set)
 {
     HotkeySet::const_iterator iter = key_set.begin();
@@ -2198,6 +2393,11 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
         SPICE_OPT_DISABLE_DISPLAY_EFFECTS,
         SPICE_OPT_CONTROLLER,
         SPICE_OPT_TITLE,
+#ifdef USE_BENCHMARK
+        SPICE_OPT_RECORD,
+        SPICE_OPT_PLAYBACK,
+        SPICE_OPT_BENCHMARK,
+#endif
 #ifdef USE_SMARTCARD
         SPICE_OPT_SMARTCARD,
         SPICE_OPT_NOSMARTCARD,
@@ -2264,6 +2464,12 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
     parser.add(SPICE_OPT_CONTROLLER, "controller", "enable external controller");
 
     parser.add(SPICE_OPT_TITLE, "title", "set window title", "title", true, 't');
+
+#ifdef USE_BENCHMARK
+    parser.add(SPICE_OPT_RECORD, "record", "record interactive session", "trace file", true, 'r');
+    parser.add(SPICE_OPT_PLAYBACK, "playback", "playback interactive session", "trace file", true, 'P');
+    parser.add(SPICE_OPT_BENCHMARK, "benchmark", "benchmark interactive session (dump input/output to the record file specified via -r)");
+#endif
 
 #ifdef USE_SMARTCARD
     parser.add(SPICE_OPT_SMARTCARD, "smartcard", "enable smartcard channel");
@@ -2382,6 +2588,17 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
         case SPICE_OPT_TITLE:
             set_title(val);
             break;
+#ifdef USE_BENCHMARK
+        case SPICE_OPT_RECORD:
+            open_record_file(val);
+            break;
+        case SPICE_OPT_PLAYBACK:
+            start_playback(val);
+            break;
+        case SPICE_OPT_BENCHMARK:
+            set_benchmark();
+            break;
+#endif
 #ifdef USE_SMARTCARD
         case SPICE_OPT_SMARTCARD:
             _smartcard_options->enable= true;

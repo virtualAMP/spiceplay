@@ -103,6 +103,11 @@ public:
 
     virtual void copy_pixels(const QRegion& dest_region, RedDrawable& dest_dc);
     virtual void copy_pixels(const QRegion& dest_region, const PixmapHeader &dest);
+#ifdef USE_BENCHMARK
+    virtual void set_record_info(FILE *record_fp, uint64_t record_start_time, bool is_record_display);
+    virtual void record_pixels(SpiceRect rect);
+    virtual int32_t check_snapshot_sync(uint32_t *snapshot_pixels, SpiceRect rect);
+#endif
 #ifdef USE_OGL
     virtual void recreate_ogl_context();
     virtual void recreate_ogl_context_interrupt();
