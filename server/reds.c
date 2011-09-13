@@ -62,6 +62,32 @@
 #ifdef USE_SMARTCARD
 #include "smartcard.h"
 #endif
+#ifdef USE_BENCHMARK
+FILE *input_log_fp;
+FILE *display_log_fp;
+static inline void record_mouse_input(int32_t button, int32_t buttons_state, int press)
+{
+    struct timeval tv;
+
+    if (input_log_fp) {
+        gettimeofday(&tv, NULL);
+        fprintf(input_log_fp, "%lu %s %d %d\n", tv.tv_sec * 1000000 + tv.tv_usec, 
+                press ? "P" : "R", button, buttons_state);
+        fflush(input_log_fp);
+    }
+}
+static inline void record_key_input(int32_t key, int down)
+{
+    struct timeval tv;
+
+    if (input_log_fp) {
+        gettimeofday(&tv, NULL);
+        fprintf(input_log_fp, "%lu %s %d\n", tv.tv_sec * 1000000 + tv.tv_usec, 
+                down ? "D" : "U", key);
+        fflush(input_log_fp);
+    }
+}
+#endif
 
 SpiceCoreInterface *core = NULL;
 static SpiceKbdInstance *keyboard = NULL;
@@ -2181,6 +2207,9 @@ static void inputs_handle_input(void *opaque, size_t size, uint32_t type, void *
             key_up->code == SCROLL_LOCK_SCAN_CODE) {
             activate_modifiers_watch();
         }
+#ifdef USE_BENCHMARK
+        record_key_input(key_up->code, 1);
+#endif
     }
     case SPICE_MSGC_INPUTS_KEY_UP: {
         SpiceMsgcKeyDown *key_down = (SpiceMsgcKeyDown *)buf;
@@ -2266,6 +2295,9 @@ static void inputs_handle_input(void *opaque, size_t size, uint32_t type, void *
             sif->motion(mouse, 0, 0, dz,
                         RED_MOUSE_STATE_TO_LOCAL(mouse_press->buttons_state));
         }
+#ifdef USE_BENCHMARK
+        record_mouse_input(mouse_press->button, mouse_press->buttons_state, 1);
+#endif
         break;
     }
     case SPICE_MSGC_INPUTS_MOUSE_RELEASE: {
@@ -2286,6 +2318,9 @@ static void inputs_handle_input(void *opaque, size_t size, uint32_t type, void *
             sif->buttons(mouse,
                          RED_MOUSE_STATE_TO_LOCAL(mouse_release->buttons_state));
         }
+#ifdef USE_BENCHMARK
+        record_mouse_input(mouse_release->button, mouse_release->buttons_state, 0);
+#endif
         break;
     }
     case SPICE_MSGC_INPUTS_KEY_MODIFIERS: {
@@ -3168,6 +3203,12 @@ static void reds_exit()
     shm_unlink(reds->stat_shm_name);
     free(reds->stat_shm_name);
 #endif
+#ifdef USE_BENCHMARK
+    if (input_log_fp)
+        fclose(input_log_fp);
+    if (display_log_fp)
+        fclose(display_log_fp);
+#endif
 }
 
 enum {
@@ -3828,6 +3869,21 @@ static int do_spice_init(SpiceCoreInterface *core_interface)
 
 #ifdef USE_SMARTCARD
     smartcard_channel_init();
+#endif
+
+#ifdef USE_BENCHMARK
+#define LOG_FN_MAX_LEN  64
+    {
+        char input_log_fn[LOG_FN_MAX_LEN], display_log_fn[LOG_FN_MAX_LEN];
+        /* file open for input logging */
+        snprintf(input_log_fn, LOG_FN_MAX_LEN, "/var/log/spice-vm%d-input.log", getpid());
+        input_log_fp = fopen(input_log_fn, "w");
+
+        /* file open for display logging */
+        snprintf(display_log_fn, LOG_FN_MAX_LEN, "/var/log/spice-vm%d-display.log", getpid());
+        display_log_fp = fopen(display_log_fn, "w");
+    }
+#undef LOG_FN_MAX_LEN
 #endif
 
     reds->mouse_mode = SPICE_MOUSE_MODE_SERVER;

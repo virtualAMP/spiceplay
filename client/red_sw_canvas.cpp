@@ -105,7 +105,7 @@ void SCanvas::set_record_info(FILE *record_fp, uint64_t record_start_time, bool 
     _record_start_time = record_start_time;
     _is_record_display = is_record_display;
 
-    printf( "%s: record_fp=%p, record_start_time=%ld, is_record_display=%d\n", __func__, record_fp, record_start_time, is_record_display );
+    //printf( "%s: record_fp=%p, record_start_time=%ld, is_record_display=%d\n", __func__, record_fp, record_start_time, is_record_display );
 }
 
 void SCanvas::record_pixels(SpiceRect rect)

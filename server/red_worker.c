@@ -102,6 +102,21 @@
 #define ZLIB_DEFAULT_COMPRESSION_LEVEL 3
 #define MIN_GLZ_SIZE_FOR_ZLIB 100
 
+#define USE_BENCHMARK   /* FIXME: why not defined here */
+#ifdef USE_BENCHMARK
+extern FILE *display_log_fp;
+static inline void record_display(uint32_t size)
+{
+    struct timeval tv;
+
+    if (display_log_fp) {
+        gettimeofday(&tv, NULL);
+        fprintf(display_log_fp, "%lu %d\n", tv.tv_sec * 1000000 + tv.tv_usec, size);
+        fflush(display_log_fp);
+    }
+}
+#endif
+
 typedef int64_t red_time_t;
 
 static inline red_time_t timespec_to_red_time(struct timespec *time)
@@ -7353,6 +7368,9 @@ static void red_send_data(RedChannel *channel, void *item)
         } else {
             channel->send_data.pos += n;
             stat_inc_counter(channel->out_bytes_counter, n);
+#ifdef USE_BENCHMARK
+            record_display(n);
+#endif
         }
     }
 }

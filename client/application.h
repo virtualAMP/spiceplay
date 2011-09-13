@@ -239,11 +239,13 @@ public:
     int  get_snapshot_offset(void);
     // playback
     bool is_sync_snapshot(int num_diff);
-    void start_playback(const char *playback_file_name);
+    void open_playback_file(const char *playback_file_name);
+    void start_playback(void);
     FILE *get_playback_fp(void) { return _playback_fp; } 
     void playback_single_event(void);
     void set_benchmark(void) { _benchmark = true; }
     bool benchmark_mode(void) { return _benchmark; }
+    void set_hide_mode(void) { _hide = true; }
 #endif
     void hide();
     void show();
@@ -409,6 +411,7 @@ private:
     FILE *_playback_fp;
     AutoRef<PlaybackTimer> _playback_timer;
     bool _benchmark;
+    bool _hide;
 #endif
     bool _sys_key_intercept_mode;
     StickyInfo _sticky_info;

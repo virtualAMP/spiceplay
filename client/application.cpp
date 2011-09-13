@@ -1727,16 +1727,18 @@ bool Application::is_sync_snapshot(int num_diff)
             num_diff, (_snapshot_offset * (_snapshot_offset + 1) + 1), num_diff >=0 && num_diff <= (_snapshot_offset * (_snapshot_offset + 1) + 1));
     return num_diff >=0 && num_diff <= (_snapshot_offset * (_snapshot_offset + 1) + 1);   // approx. 1/4 of total pixels 
 }
-void Application::start_playback(const char *playback_file_name)
+void Application::open_playback_file(const char *playback_file_name)
 {
-    if( ( _playback_fp = fopen( playback_file_name, "r" ) ) == NULL ) {
+    if( ( _playback_fp = fopen( playback_file_name, "r" ) ) == NULL )
         fprintf( stderr, "playback file open error: %s\n", playback_file_name);
-        return;
-    }
+}
+void Application::start_playback(void)
+{
+    printf("Start playback\n");
     _record_start_time = Platform::get_monolithic_time() / 1000;
 
     _playback_timer.reset(new PlaybackTimer(*this));
-    activate_interval_timer(*_playback_timer, 10000);
+    activate_interval_timer(*_playback_timer, 1000);
 
 }
 
@@ -1833,8 +1835,10 @@ void Application::playback_single_event()
                 break;
             }
         }
-        if (fscanf( _playback_fp, "%lu ", &next_time ) != 1) 
-                return_with_msg();
+        if (fscanf( _playback_fp, "%lu ", &next_time ) != 1) { 
+            printf("End playback\n");
+            exit(0);
+        }
         deactivate_interval_timer(*_playback_timer);
 
         interval_time = (next_time - time) / 1000;
@@ -2397,6 +2401,7 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
         SPICE_OPT_RECORD,
         SPICE_OPT_PLAYBACK,
         SPICE_OPT_BENCHMARK,
+        SPICE_OPT_HIDE,
 #endif
 #ifdef USE_SMARTCARD
         SPICE_OPT_SMARTCARD,
@@ -2469,6 +2474,7 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
     parser.add(SPICE_OPT_RECORD, "record", "record interactive session", "trace file", true, 'r');
     parser.add(SPICE_OPT_PLAYBACK, "playback", "playback interactive session", "trace file", true, 'P');
     parser.add(SPICE_OPT_BENCHMARK, "benchmark", "benchmark interactive session (dump input/output to the record file specified via -r)");
+    parser.add(SPICE_OPT_HIDE, "hide", "hide window (usually with playback mode)");
 #endif
 
 #ifdef USE_SMARTCARD
@@ -2593,10 +2599,13 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
             open_record_file(val);
             break;
         case SPICE_OPT_PLAYBACK:
-            start_playback(val);
+            open_playback_file(val);
             break;
         case SPICE_OPT_BENCHMARK:
             set_benchmark();
+            break;
+        case SPICE_OPT_HIDE:
+            set_hide_mode();
             break;
 #endif
 #ifdef USE_SMARTCARD
@@ -2802,6 +2811,12 @@ int Application::main(int argc, char** argv, const char* version_str)
         } else {
             app->_main_screen->show(true, NULL);
         }
+#ifdef USE_BENCHMARK
+        if (app->_hide)
+            app->_main_screen->hide();
+        if (app->_playback_fp)
+            app->start_playback();
+#endif
         ret = app->run();
         cleanup_platform_globals();
     } else {
