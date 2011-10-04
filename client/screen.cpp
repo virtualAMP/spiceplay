@@ -98,14 +98,19 @@ RedScreen::RedScreen(Application& owner, int id, const std::string& name, int wi
     , _active_layer_change_event (false)
     , _pointer_on_screen (false)
 #ifdef USE_BENCHMARK
-    , _snapshot_pixels (new uint32_t[(owner.get_snapshot_offset()+1) * (owner.get_snapshot_offset()+1)])
-    , _is_pending_snapshot_sync (false)
+    , _snapshot_pixels (NULL)
+    , _is_pending_snapshot_sync (0)
 #endif
 {
     region_init(&_dirty_region);
     set_name(name);
     _size.x = width;
     _size.y = height;
+#ifdef USE_BENCHMARK
+    if (_snapshot_pixels)
+        delete _snapshot_pixels;
+    _snapshot_pixels = new uint32_t[width * height];  /*FIXME-spiceplay: 50*/
+#endif
     _origin.x = _origin.y = 0;
     create_composit_area();
     _window.resize(_size.x, _size.y);
@@ -188,6 +193,11 @@ void RedScreen::resize(int width, int height)
     RecurciveLock lock(_update_lock);
     _size.x = width;
     _size.y = height;
+#ifdef USE_BENCHMARK
+    if (_snapshot_pixels)
+        delete _snapshot_pixels;
+    _snapshot_pixels = new uint32_t[width * height];  /*FIXME-spiceplay: 50*/
+#endif
     create_composit_area();
     if (_full_screen) {
         bool cuptur = _owner.rearrange_monitors(*this);
@@ -297,6 +307,13 @@ static inline void get_snapshot_rect_by_point(SpiceRect &rect, int x, int y, int
     rect.right = x + offset;
     rect.bottom = y + offset;
 }
+inline void RedScreen::get_snapshot_rect_entire(SpiceRect &rect)
+{
+    rect.left = 0;
+    rect.top = 0;
+    rect.right = _size.x - 1;
+    rect.bottom = _size.y - 1;
+}
 #endif
 
 void RedScreen::composit_to_screen(RedDrawable& win_dc, const QRegion& region)
@@ -379,7 +396,11 @@ int32_t RedScreen::check_snapshot_sync(ScreenLayer *layer)
     int32_t num_diff = -1;
     SpiceRect rect;
     if( _is_pending_snapshot_sync ) {
-        get_snapshot_rect_by_point(rect, _pointer_pos.x, _pointer_pos.y, _owner.get_snapshot_offset());
+        int type = _is_pending_snapshot_sync;
+        if (type == 1) 
+            get_snapshot_rect_by_point(rect, _pointer_pos.x, _pointer_pos.y, _owner.get_snapshot_offset());
+        else if (type == 2)
+            get_snapshot_rect_entire(rect);
 
         if( layer ) {
             num_diff = layer->check_snapshot_sync(_snapshot_pixels, rect);
@@ -401,6 +422,10 @@ int32_t RedScreen::check_snapshot_sync(ScreenLayer *layer)
                 }
             }
         }
+        /* the first time to be synced */
+        if (type == 2 && _is_pending_snapshot_sync == 0) {
+            fprintf(stderr, "%lu\n", Platform::get_cur_time_msec() - last_input_time_in_msec); 
+        }
     }
     return num_diff;
 }
@@ -419,8 +444,9 @@ inline void RedScreen::update_composit(QRegion& composit_rgn)
         region_or(&composit_rgn, &dest_region);
         layer->copy_pixels(dest_region, *_composit_area);
 #ifdef USE_BENCHMARK
-        if( _is_pending_snapshot_sync )     /*FIXME*/
-            printf( "%s (%s) !!\n", check_snapshot_sync(layer) ? "not synced!" : "synced!" , __func__ );
+        if( _is_pending_snapshot_sync )
+            check_snapshot_sync(layer);
+            //printf( "%s (%s) !!\n", check_snapshot_sync(layer) ? "not synced!" : "synced!" , __func__ );
 #endif
     }
 }
@@ -444,8 +470,9 @@ inline void RedScreen::draw_direct(RedDrawable& win_dc, QRegion& direct_rgn, QRe
         QRegion& dest_region = layer->direct_area();
         layer->copy_pixels(dest_region, win_dc);
 #ifdef USE_BENCHMARK
-        if( _is_pending_snapshot_sync )     /*FIXME*/
-            printf( "%s (%s) !!\n", check_snapshot_sync(layer) ? "not synced!" : "synced!" , __func__ );
+        if( _is_pending_snapshot_sync )
+            check_snapshot_sync(layer);
+            //printf( "%s (%s) !!\n", check_snapshot_sync(layer) ? "not synced!" : "synced!" , __func__ );
 #endif
     }
 }
@@ -771,6 +798,7 @@ void RedScreen::on_mouse_button_release(SpiceMouseButton button, unsigned int bu
     }
 #ifdef USE_BENCHMARK
     _owner.record_mouse_button(button, buttons_state, false);
+    last_input_time_in_msec = Platform::get_cur_time_msec(); 
 #endif
     _pointer_layer->on_mouse_button_release(button, buttons_state);
 }
@@ -789,7 +817,24 @@ void RedScreen::on_pointer_leave()
 void RedScreen::on_key_press(RedKey key)
 {
 #ifdef USE_BENCHMARK
-    _owner.record_key(key, true);
+    if (key != 311)     /*FIXME-spiceplay*/
+        _owner.record_key(key, true);
+    else if( _owner.get_record_fp() ) {     // PrtSc-SysRq
+        if( _composit_area ) {
+            SpiceRect rect;
+            get_snapshot_rect_entire(rect);
+
+            for (int i = 0; i < (int)_layes.size(); i++) {
+                ScreenLayer* layer;
+
+                if (!(layer = _layes[i])) {
+                    continue;
+                }
+                layer->record_pixels(rect);
+            }
+        }
+    }
+    if (key != 311)     /*FIXME-spiceplay*/
 #endif
     _owner.on_key_down(key);
 }
@@ -797,7 +842,11 @@ void RedScreen::on_key_press(RedKey key)
 void RedScreen::on_key_release(RedKey key)
 {
 #ifdef USE_BENCHMARK
-    _owner.record_key(key, false);
+    if (key != 311) {     /*FIXME-spiceplay*/
+        _owner.record_key(key, false);
+        last_input_time_in_msec = Platform::get_cur_time_msec(); 
+    }
+    if (key != 311)     /*FIXME-spiceplay*/
 #endif
     _owner.on_key_up(key);
 }

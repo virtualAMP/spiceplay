@@ -37,6 +37,9 @@ public:
     static void msleep(unsigned int millisec);
     static void yield();
     static uint64_t get_monolithic_time();
+#ifdef USE_BENCHMARK
+    static uint64_t get_cur_time_msec();
+#endif
     static void get_temp_dir(std::string& path);
     static void get_app_data_dir(std::string& path, const std::string& app_name);
     static void path_append(std::string& path, const std::string& partial_path);

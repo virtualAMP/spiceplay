@@ -553,6 +553,17 @@ uint64_t Platform::get_monolithic_time()
 #endif
 }
 
+#ifdef USE_BENCHMARK
+uint64_t Platform::get_cur_time_msec()
+{
+#ifdef HAVE_CLOCK_GETTIME
+    return Platform::get_monolithic_time() / 1000000;
+#else
+    return Platform::get_monolithic_time() / 1000;
+#endif
+}
+#endif
+
 void Platform::get_temp_dir(std::string& path)
 {
     path = "/tmp/";

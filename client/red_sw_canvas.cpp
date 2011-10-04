@@ -94,11 +94,14 @@ void SCanvas::copy_pixels(const QRegion& region, RedDrawable& dest_dc)
     }
 #ifdef USE_BENCHMARK
     if( _record_fp && _is_record_display && update_pct )
-        fprintf(_record_fp, "%Ld O %d\n", Platform::get_monolithic_time() / 1000 - _record_start_time, update_pct * 100 / (_pixmap->get_height() * _pixmap->get_width()) );
+        fprintf(_record_fp, "%Ld O %d\n", Platform::get_cur_time_msec() - _record_start_time, update_pct * 100 / (_pixmap->get_height() * _pixmap->get_width()) );
 #endif
 }
 
 #ifdef USE_BENCHMARK
+
+/*FIXME-spiceplay: 50*/
+#define BENCH_SNAPSHOT_STEP     50
 void SCanvas::set_record_info(FILE *record_fp, uint64_t record_start_time, bool is_record_display)
 {
     _record_fp = record_fp;
@@ -118,20 +121,25 @@ void SCanvas::record_pixels(SpiceRect rect)
         int pixmap_width = _pixmap->get_width();
         int pixmap_height = _pixmap->get_height();
         int left  = rect.left >= 0 ? rect.left : 0;
-        int right = rect.right < pixmap_width ? rect.right : pixmap_width;
+        int right = rect.right < pixmap_width ? rect.right : pixmap_width - 1;
         int top = rect.top >= 0 ? rect.top : 0;
-        int bottom = rect.bottom < pixmap_height ? rect.bottom : pixmap_height;
+        int bottom = rect.bottom < pixmap_height ? rect.bottom : pixmap_height - 1;
         int width = right - left + 1;
         int height = bottom - top + 1;
+        char type = width == pixmap_width && height == pixmap_height ? 'B' : 'S';
+        int step =  width == pixmap_width && height == pixmap_height ? BENCH_SNAPSHOT_STEP : 1;
+        int num_pixels = ((width + step - 1) / step) * ((height + step - 1) / step);
         
-        fprintf( _record_fp, "%Ld S %d\n", Platform::get_monolithic_time() / 1000 - _record_start_time, width * height );
-        for( i=0 ; i < width ; i++ ) {
-            for( j=0 ; j < height ; j++ ) {
+        fprintf( _record_fp, "%Ld %c %d\n", Platform::get_cur_time_msec() - _record_start_time, type, num_pixels);
+        for( i=0 ; i < width ; i+=step ) {
+            for( j=0 ; j < height ; j+=step ) {
                 int x = left + i;
                 int y = top + j;
                 fprintf( _record_fp, "%x\n", *((uint32_t *)data + x + (y * pixmap_width)) );
             }
         }
+        if (type == 'B')
+            printf("snapshot point for benchmark (# of pixels=%d)\n", num_pixels);
     }
 }
 
@@ -143,21 +151,23 @@ int32_t SCanvas::check_snapshot_sync(uint32_t *snapshot_pixels, SpiceRect rect)
     int pixmap_width = _pixmap->get_width();
     int pixmap_height = _pixmap->get_height();
     int left  = rect.left >= 0 ? rect.left : 0;
-    int right = rect.right < pixmap_width ? rect.right : pixmap_width;
+    int right = rect.right < pixmap_width ? rect.right : pixmap_width - 1;
     int top = rect.top >= 0 ? rect.top : 0;
-    int bottom = rect.bottom < pixmap_height ? rect.bottom : pixmap_height;
+    int bottom = rect.bottom < pixmap_height ? rect.bottom : pixmap_height - 1;
     int width = right - left + 1;
     int height = bottom - top + 1;
-    for( i=0 ; i < width ; i++ ) {
-        for( j=0 ; j < height ; j++ ) {
+    int step =  width == pixmap_width && height == pixmap_height ? BENCH_SNAPSHOT_STEP : 1;
+
+    for( i=0 ; i < width ; i+=step ) {
+        for( j=0 ; j < height ; j+=step ) {
             int x = left + i;
             int y = top + j;
             //fprintf( record_fp, "%x\n", *((uint32_t *)data + x + (y * pixmap_width)) );
             if( snapshot_pixels[k] != *((uint32_t *)data + x + (y * pixmap_width)) ) {
                 num_diff++;
             }
-            printf( "[SNAP] %d: cur=%x <-> snap=%x\n", k, 
-                    *((uint32_t *)data + x + (y * pixmap_width)), snapshot_pixels[k] );
+            //printf( "[SNAP] %d: cur=%x <-> snap=%x\n", k, 
+            //        *((uint32_t *)data + x + (y * pixmap_width)), snapshot_pixels[k] );
             k++;
         }
     }

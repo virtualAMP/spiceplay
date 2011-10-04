@@ -1671,7 +1671,7 @@ uint64_t Application::get_record_start_time()
 }
 uint64_t Application::record_time_in_msec() 
 {
-    return Platform::get_monolithic_time() / 1000 - _record_start_time;
+    return Platform::get_cur_time_msec() - _record_start_time;
 }
 void Application::open_record_file(const char *record_file_name)
 {
@@ -1679,7 +1679,7 @@ void Application::open_record_file(const char *record_file_name)
         fprintf( stderr, "record file open error: %s\n", record_file_name );
         return;
     }
-    _record_start_time = Platform::get_monolithic_time() / 1000;
+    _record_start_time = Platform::get_cur_time_msec();
 }
 void Application::record_mouse_enter(int x, int y, unsigned int buttons_state) 
 {
@@ -1723,9 +1723,15 @@ private:
 };
 bool Application::is_sync_snapshot(int num_diff) 
 {
-    printf( "num_diff=%d  --- threshold=%d  -> bool=%d\n", 
-            num_diff, (_snapshot_offset * (_snapshot_offset + 1) + 1), num_diff >=0 && num_diff <= (_snapshot_offset * (_snapshot_offset + 1) + 1));
-    return num_diff >=0 && num_diff <= (_snapshot_offset * (_snapshot_offset + 1) + 1);   // approx. 1/4 of total pixels 
+    int threshold = 0;
+    int type = _main_screen->is_pending_snapshot_sync();
+    if (type == 1) 
+        threshold = (_snapshot_offset * (_snapshot_offset + 1) + 1);   // approx. 1/4 of total pixels 
+    else if (type == 2)
+        threshold = 20;     /*FIXME-spiceplay*/
+    //printf( "num_diff=%d  --- threshold=%d  -> bool=%d\n", 
+    //        num_diff, (_snapshot_offset * (_snapshot_offset + 1) + 1), num_diff >=0 && num_diff <= (_snapshot_offset * (_snapshot_offset + 1) + 1));
+    return num_diff >=0 && num_diff <= threshold;
 }
 void Application::open_playback_file(const char *playback_file_name)
 {
@@ -1735,7 +1741,7 @@ void Application::open_playback_file(const char *playback_file_name)
 void Application::start_playback(void)
 {
     printf("Start playback\n");
-    _record_start_time = Platform::get_monolithic_time() / 1000;
+    _record_start_time = Platform::get_cur_time_msec();
 
     _playback_timer.reset(new PlaybackTimer(*this));
     activate_interval_timer(*_playback_timer, 1000);
@@ -1749,8 +1755,8 @@ void Application::start_playback(void)
 void Application::playback_single_event()
 {
     static uint64_t time = 0;
+    static char cmd = 0;
     uint64_t next_time, interval_time;
-    char cmd;
     //bool is_press = false;
     if( !time ) 
         if (fscanf( _playback_fp, "%lu ", &time ) != 1) 
@@ -1762,7 +1768,7 @@ void Application::playback_single_event()
             return;
     }
 
-    if( fscanf( _playback_fp, "%c", &cmd ) == 1 ) {
+    if( cmd || fscanf( _playback_fp, "%c", &cmd ) == 1 ) {
         switch(cmd) {
             case 'E':
             case 'M':
@@ -1779,6 +1785,7 @@ void Application::playback_single_event()
                 }
                 break;
             }
+            case 'B':
             case 'S':
             {
                 int i;
@@ -1791,7 +1798,7 @@ void Application::playback_single_event()
                                 return_with_msg();
                         _main_screen->set_snapshot_pixels(i, pixel);
                     }
-                    _main_screen->set_pending_snapshot(true);
+                    _main_screen->set_pending_snapshot(cmd == 'S' ? 1 : 2);
                 }
                 break;
             }
@@ -1839,10 +1846,14 @@ void Application::playback_single_event()
             printf("End playback\n");
             exit(0);
         }
+        if (fscanf( _playback_fp, "%c ", &cmd ) != 1) {     /* FIXME-spiceplay */
+            printf("End playback\n");
+            exit(0);
+        }
         deactivate_interval_timer(*_playback_timer);
 
-        interval_time = (next_time - time) / 1000;
-        if( interval_time <= 0 ) 
+        interval_time = next_time - time;
+        if( interval_time <= 0 || cmd == 'B' ) 
             interval_time = 1;
         activate_interval_timer(*_playback_timer, interval_time );
 
