@@ -51,6 +51,10 @@
 #include <smartcard_channel.h>
 #endif
 
+#ifdef USE_BENCHMARK
+#include <math.h>   /* for sqrt */
+#endif
+
 #define STICKY_KEY_PIXMAP ALT_IMAGE_RES_ID
 #define STICKY_KEY_TIMEOUT 750
 
@@ -350,7 +354,7 @@ Application::Application()
     , _title ("SPICEc:%d")
 #ifdef USE_BENCHMARK
     , _record_fp (NULL)
-    , _snapshot_offset(4)
+    , _snapshot_offset(10)
     , _playback_fp (NULL)
     , _benchmark (false)
 #endif
@@ -1793,6 +1797,10 @@ void Application::playback_single_event()
                 if (fscanf( _playback_fp, "%d\n", &num_pixels ) != 1) 
                         return_with_msg();
                 if( num_pixels > 0 ) {
+                    if (cmd == 'S') {
+                        _snapshot_offset = sqrt(num_pixels) / 2;
+                        printf( "snapshot offset=%d\n", _snapshot_offset );
+                    }
                     for( i=0 ; i < num_pixels ; i++ ) {
                         if (fscanf( _playback_fp, "%x\n", &pixel ) != 1)
                                 return_with_msg();
@@ -2410,6 +2418,7 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
         SPICE_OPT_TITLE,
 #ifdef USE_BENCHMARK
         SPICE_OPT_RECORD,
+        SPICE_OPT_SNAPSHOT_OFFSET,
         SPICE_OPT_PLAYBACK,
         SPICE_OPT_BENCHMARK,
         SPICE_OPT_HIDE,
@@ -2483,6 +2492,7 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
 
 #ifdef USE_BENCHMARK
     parser.add(SPICE_OPT_RECORD, "record", "record interactive session", "trace file", true, 'r');
+    parser.add(SPICE_OPT_SNAPSHOT_OFFSET, "snapoff", "snapshot offset pixels around a mouse cursor", "snapshot offset pixels", true, 'S');
     parser.add(SPICE_OPT_PLAYBACK, "playback", "playback interactive session", "trace file", true, 'P');
     parser.add(SPICE_OPT_BENCHMARK, "benchmark", "benchmark interactive session (dump input/output to the record file specified via -r)");
     parser.add(SPICE_OPT_HIDE, "hide", "hide window (usually with playback mode)");
@@ -2608,6 +2618,11 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
 #ifdef USE_BENCHMARK
         case SPICE_OPT_RECORD:
             open_record_file(val);
+            break;
+        case SPICE_OPT_SNAPSHOT_OFFSET:
+            _snapshot_offset = atoi(val);
+            printf("recoding with snapshot offset pixel %d (# of region's pixels=%d)\n",
+                    _snapshot_offset, (_snapshot_offset + 1) * (_snapshot_offset + 1));
             break;
         case SPICE_OPT_PLAYBACK:
             open_playback_file(val);
