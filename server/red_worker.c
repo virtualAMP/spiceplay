@@ -102,7 +102,7 @@
 #define ZLIB_DEFAULT_COMPRESSION_LEVEL 3
 #define MIN_GLZ_SIZE_FOR_ZLIB 100
 
-#define USE_BENCHMARK   /* FIXME: why not defined here */
+//#define USE_BENCHMARK   /* Disable by default FIXME: why not defined here */
 #ifdef USE_BENCHMARK
 extern FILE *display_log_fp;
 static inline void record_display(uint32_t size)
