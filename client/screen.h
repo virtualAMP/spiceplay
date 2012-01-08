@@ -108,8 +108,9 @@ public:
     void update();
 #ifdef USE_BENCHMARK
     void set_snapshot_pixels(int index, uint32_t pixel) { _snapshot_pixels[index] = pixel; } /*FIXME:bound*/
-    void set_pending_snapshot(int pending) { _is_pending_snapshot_sync = pending; }
+    void set_pending_snapshot(int pending, uint32_t num_pixels) { _is_pending_snapshot_sync = pending; _num_pending_pixels = num_pixels; }
     int is_pending_snapshot_sync(void) { return _is_pending_snapshot_sync; }
+    uint32_t get_num_pending_pixels(void) { return _num_pending_pixels; }
     int32_t check_snapshot_sync(ScreenLayer *layer);
     void get_snapshot_rect_entire(SpiceRect &rect);
 #endif
@@ -210,6 +211,7 @@ private:
 #ifdef USE_BENCHMARK
     uint32_t *_snapshot_pixels;
     int _is_pending_snapshot_sync;
+    int _num_pending_pixels;
     uint64_t last_input_time_in_msec;
     friend class Application;
 #endif

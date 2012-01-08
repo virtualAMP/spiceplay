@@ -1729,10 +1729,11 @@ bool Application::is_sync_snapshot(int num_diff)
 {
     int threshold = 0;
     int type = _main_screen->is_pending_snapshot_sync();
+    uint32_t num_pixels = _main_screen->get_num_pending_pixels();
     if (type == 1) 
-        threshold = (_snapshot_offset * (_snapshot_offset + 1) + 1);   // approx. 1/4 of total pixels 
+        threshold = num_pixels / 4;     /* tolerance = 1/4 of pixels around mouse cursor */
     else if (type == 2)
-        threshold = 20;     /*FIXME-spiceplay*/
+        threshold = num_pixels / 10;    /* tolerance = 1/10 of total sampled pixels */
     //printf( "num_diff=%d  --- threshold=%d  -> bool=%d\n", 
     //        num_diff, (_snapshot_offset * (_snapshot_offset + 1) + 1), num_diff >=0 && num_diff <= (_snapshot_offset * (_snapshot_offset + 1) + 1));
     return num_diff >=0 && num_diff <= threshold;
@@ -1806,7 +1807,7 @@ void Application::playback_single_event()
                                 return_with_msg();
                         _main_screen->set_snapshot_pixels(i, pixel);
                     }
-                    _main_screen->set_pending_snapshot(cmd == 'S' ? 1 : 2);
+                    _main_screen->set_pending_snapshot(cmd == 'S' ? 1 : 2, num_pixels);
                 }
                 break;
             }
