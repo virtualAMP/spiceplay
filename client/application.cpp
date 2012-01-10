@@ -1760,9 +1760,11 @@ void Application::start_playback(void)
 void Application::playback_single_event()
 {
     static uint64_t time = 0;
+    static uint64_t pending_think_time = 0;
     static char cmd = 0;
     uint64_t next_time, interval_time;
     //bool is_press = false;
+
     if( !time ) 
         if (fscanf( _playback_fp, "%lu ", &time ) != 1) 
                 return_with_msg();
@@ -1771,6 +1773,14 @@ void Application::playback_single_event()
         _main_screen->check_snapshot_sync(NULL);
         if( _main_screen->is_pending_snapshot_sync() )
             return;
+    }
+
+    if( pending_think_time ) {
+        deactivate_interval_timer(*_playback_timer);
+        activate_interval_timer(*_playback_timer, pending_think_time);
+        printf( "sleep for think time (%lu msec) - %d\n", pending_think_time, _main_screen->is_pending_snapshot_sync());
+        pending_think_time = 0;
+        return;
     }
 
     if( cmd || fscanf( _playback_fp, "%c", &cmd ) == 1 ) {
@@ -1802,6 +1812,8 @@ void Application::playback_single_event()
                         _snapshot_offset = sqrt(num_pixels) / 2;
                         printf( "snapshot offset=%d\n", _snapshot_offset );
                     }
+                    else
+                        printf( "desired user-perceived point\n" );
                     for( i=0 ; i < num_pixels ; i++ ) {
                         if (fscanf( _playback_fp, "%x\n", &pixel ) != 1)
                                 return_with_msg();
@@ -1865,6 +1877,9 @@ void Application::playback_single_event()
         if( interval_time <= 0 || cmd == 'B' ) 
             interval_time = 1;
         activate_interval_timer(*_playback_timer, interval_time );
+
+        if( _think_time && _main_screen->is_pending_snapshot_sync() == 2 ) 
+            pending_think_time = _think_time;
 
         time = next_time;
     }
@@ -2423,6 +2438,7 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
         SPICE_OPT_PLAYBACK,
         SPICE_OPT_BENCHMARK,
         SPICE_OPT_HIDE,
+        SPICE_OPT_THINK_TIME,
 #endif
 #ifdef USE_SMARTCARD
         SPICE_OPT_SMARTCARD,
@@ -2497,6 +2513,7 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
     parser.add(SPICE_OPT_PLAYBACK, "playback", "playback interactive session", "trace file", true, 'P');
     parser.add(SPICE_OPT_BENCHMARK, "benchmark", "benchmark interactive session (dump input/output to the record file specified via -r)");
     parser.add(SPICE_OPT_HIDE, "hide", "hide window (usually with playback mode)");
+    parser.add(SPICE_OPT_THINK_TIME, "thinktime", "think time after prtSrc during playback", "think time (msec)", true, 'T');
 #endif
 
 #ifdef USE_SMARTCARD
@@ -2633,6 +2650,9 @@ bool Application::process_cmd_line(int argc, char** argv, bool &full_screen)
             break;
         case SPICE_OPT_HIDE:
             set_hide_mode();
+            break;
+        case SPICE_OPT_THINK_TIME:
+            set_think_time(atoi(val));
             break;
 #endif
 #ifdef USE_SMARTCARD

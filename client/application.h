@@ -246,6 +246,7 @@ public:
     void set_benchmark(void) { _benchmark = true; }
     bool benchmark_mode(void) { return _benchmark; }
     void set_hide_mode(void) { _hide = true; }
+    void set_think_time(int val) { _think_time = val; }
 #endif
     void hide();
     void show();
@@ -412,6 +413,7 @@ private:
     AutoRef<PlaybackTimer> _playback_timer;
     bool _benchmark;
     bool _hide;
+    uint64_t _think_time;
 #endif
     bool _sys_key_intercept_mode;
     StickyInfo _sticky_info;
