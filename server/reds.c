@@ -62,6 +62,7 @@
 #ifdef USE_SMARTCARD
 #include "smartcard.h"
 #endif
+#undef USE_BENCHMARK
 #ifdef USE_BENCHMARK
 FILE *input_log_fp;
 FILE *display_log_fp;
